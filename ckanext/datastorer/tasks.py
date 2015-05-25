@@ -70,8 +70,7 @@ def datetime_procesor():
     return datetime_convert
 
 
-@celery.task(name="datastorer.upload", max_retries=24 * 7,
-             default_retry_delay=3600)
+@celery.task(name="datastorer.upload", max_retries=3)
 def datastorer_upload(context, data):
     logger = datastorer_upload.get_logger()
     try:
@@ -93,6 +92,7 @@ def datastorer_upload(context, data):
 
 def _datastorer_upload(context, resource, logger):
     result = download(context, resource, data_formats=DATA_FORMATS)
+    logger.info('Downloaded downloaded resource %r' %(resource))
 
     content_type = result['headers'].get('content-type', '')\
                                     .split(';', 1)[0]  # remove parameters

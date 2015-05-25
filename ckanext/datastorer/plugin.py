@@ -13,28 +13,26 @@ from datetime import datetime
 from logging import getLogger
 
 
-logger = getLogger('ckanext_datastorer')
+logger = getLogger(__name__)
 
 
 class DatastorerPlugin(SingletonPlugin):
-    """
-    Registers to be notified whenever CKAN resources are created or their
-    URLs change, and will create a new ckanext.datastorer celery task to
-    put the resource in the datastore.
+    """Register to be notified whenever CKAN resources are created and will 
+    create a ckanext.datastorer celery task to put the resource in the datastore.
     """
     implements(IDomainObjectModification, inherit=True)
     implements(IResourceUrlChange)
 
     def notify(self, entity, operation=None):
+        
         if not isinstance(entity, model.Resource):
             return
+        
+        logger.debug('Notified: %s on resource %r' %(operation, entity))
+        
         if operation:
-            if operation == model.domain_object.DomainObjectOperation.new:
+            if operation == 'new':
                 self._create_datastorer_task(entity)
-        else:
-            # if operation is None, resource URL has been changed, as the
-            # notify function in IResourceUrlChange only takes 1 parameter
-            self._create_datastorer_task(entity)
 
     def _get_site_url(self):
         try:
@@ -72,4 +70,6 @@ class DatastorerPlugin(SingletonPlugin):
                                          datastorer_task_status)
         celery.send_task("datastorer.upload",
                          args=[context, data],
+                         countdown=15,
                          task_id=task_id)
+        logger.info('Sent task: datastorer.upload id=%s context=%r' %(task_id, context))
