@@ -28,7 +28,7 @@ class DatastorerPlugin(SingletonPlugin):
         if not isinstance(entity, model.Resource):
             return
         
-        logger.debug('Notified: %s on resource %r' %(operation, entity))
+        logger.debug('Notified: %s on resource %s' %(operation, entity.id))
         
         if operation:
             if operation == 'new':
