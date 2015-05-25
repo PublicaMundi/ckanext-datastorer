@@ -92,7 +92,7 @@ def datastorer_upload(context, data):
 
 def _datastorer_upload(context, resource, logger):
     result = download(context, resource, data_formats=DATA_FORMATS)
-    logger.info('Downloaded downloaded resource %r' %(resource))
+    logger.info('Downloaded resource %r' %(resource))
 
     content_type = result['headers'].get('content-type', '')\
                                     .split(';', 1)[0]  # remove parameters
