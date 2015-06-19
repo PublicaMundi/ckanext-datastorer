@@ -4,6 +4,7 @@ from ckan.model.types import make_uuid
 from ckan.plugins import (SingletonPlugin, implements,
                           IDomainObjectModification,
                           IResourceUrlChange, IConfigurable)
+from ckan.plugins import toolkit
 from ckan.logic import get_action
 from ckan.lib.celery_app import celery
 import ckan.lib.helpers as h
@@ -15,6 +16,7 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
+interesting_formats = ['csv', 'xls', 'tsv']
 
 class DatastorerPlugin(SingletonPlugin):
     """Register to be notified whenever CKAN resources are created and will 
@@ -22,17 +24,32 @@ class DatastorerPlugin(SingletonPlugin):
     """
     implements(IDomainObjectModification, inherit=True)
     implements(IResourceUrlChange)
+    implements(IConfigurable, inherit=True)
 
     def notify(self, entity, operation=None):
         
         if not isinstance(entity, model.Resource):
             return
         
-        logger.debug('Notified: %s on resource %s' %(operation, entity.id))
+        resource = entity
         
+        logger.debug('Notified: %s on resource %s' %(operation, resource.id))
+        
+        resource_format = resource.format.lower()
+        if not resource_format in self.interesting_formats:
+            return
+
         if operation:
             if operation == 'new':
-                self._create_datastorer_task(entity)
+                self._create_datastorer_task(resource)
+
+    def configure(self, config):
+        formats = toolkit.aslist(
+            config.get('ckanext.datastorer.formats', interesting_formats))
+        self.interesting_formats = set(interesting_formats) & set(formats) 
+        
+        logger.info('Interested in resource formats: %s' %(
+            ', '.join(self.interesting_formats)))
 
     def _get_site_url(self):
         try:
