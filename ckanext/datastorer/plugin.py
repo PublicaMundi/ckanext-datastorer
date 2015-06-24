@@ -62,13 +62,21 @@ class DatastorerPlugin(SingletonPlugin):
                                             'ignore_auth': True,
                                             'defer_commit': True}, {})
 
-        context = json.dumps({
+        context = {
             'site_url': self._get_site_url(),
             'apikey': user.get('apikey'),
             'site_user_apikey': user.get('apikey'),
             'username': user.get('name'),
-        })
-        data = json.dumps(resource_dictize(resource, {'model': model}))
+        }
+
+        try:
+            sample_size = int(config.get('ckanext.datastorer.sample_size'))
+        except:
+            pass
+        else:
+            context['sample_size'] = sample_size
+        
+        data = resource_dictize(resource, {'model': model})
 
         task_id = make_uuid()
         datastorer_task_status = {
@@ -86,7 +94,7 @@ class DatastorerPlugin(SingletonPlugin):
         get_action('task_status_update')(archiver_task_context,
                                          datastorer_task_status)
         celery.send_task("datastorer.upload",
-                         args=[context, data],
+                         args=[json.dumps(context), json.dumps(data)],
                          countdown=15,
                          task_id=task_id)
         logger.info('Sent task: datastorer.upload id=%s context=%r' %(task_id, context))
