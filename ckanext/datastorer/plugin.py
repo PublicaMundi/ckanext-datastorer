@@ -51,6 +51,13 @@ class DatastorerPlugin(SingletonPlugin):
         logger.info('Interested in resource formats: %s' %(
             ', '.join(self.interesting_formats)))
 
+        try:
+            sample_size = int(config.get('ckanext.datastorer.sample_size'))
+        except:
+            self.sample_size = None
+        else:
+            self.sample_size = sample_size 
+
     def _get_site_url(self):
         try:
             return h.url_for_static('/', qualified=True)
@@ -68,13 +75,9 @@ class DatastorerPlugin(SingletonPlugin):
             'site_user_apikey': user.get('apikey'),
             'username': user.get('name'),
         }
-
-        try:
-            sample_size = int(config.get('ckanext.datastorer.sample_size'))
-        except:
-            pass
-        else:
-            context['sample_size'] = sample_size
+        
+        if self.sample_size:
+            context['sample_size'] = self.sample_size
         
         data = resource_dictize(resource, {'model': model})
 
