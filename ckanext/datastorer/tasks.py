@@ -2,13 +2,14 @@ import json
 import requests
 import datetime
 import itertools
-
+import zipfile
 import locale
-
 import messytables
-from messytables import (any_tableset, types_processor,
-                         headers_guess, headers_processor, headers_make_unique,
-                         type_guess, offset_processor)
+from messytables import (
+    any_tableset, types_processor,
+    headers_guess, headers_processor, headers_make_unique,
+    type_guess, offset_processor)
+
 from ckanext.archiver.tasks import download, update_task_status
 from ckan.lib.celery_app import celery
 from common import DATA_FORMATS, TYPE_MAPPING
@@ -32,7 +33,6 @@ def get_response_error(response):
         d = d["error"]
     return repr(response) + "\n" + json.dumps(d, sort_keys=True, indent=4) + "\n"
 
-
 def check_response_and_retry(response, datastore_create_request_url, logger):
     try:
         if not response.status_code:
@@ -46,7 +46,6 @@ def check_response_and_retry(response, datastore_create_request_url, logger):
         raise DatastorerException('Datastorer bad response code (%s) on %s. Response was %s' %
                 (response.status_code, datastore_create_request_url, response))
 
-
 def stringify_processor():
     def to_string(row_set, row):
         for cell in row:
@@ -56,7 +55,6 @@ def stringify_processor():
                 cell.value = unicode(cell.value)
         return row
     return to_string
-
 
 def datetime_procesor():
     ''' Stringifies dates so that they can be parsed by the db
@@ -69,6 +67,31 @@ def datetime_procesor():
         return row
     return datetime_convert
 
+def open_zipped_tableset(fp, extension='csv'):
+    '''Open a ZIP archive, choose the entry that contains tabular data,
+    and open it as a file stream (file-like object).
+    '''
+    
+    match_content_extensions = {
+        'xls': ['xls', 'csv'],
+        'csv': ['csv', 'xls', 'txt'],
+        'tsv': ['tsv', 'csv', 'xls', 'txt'],
+    }
+    
+    zp = zipfile.ZipFile(fp, 'r')
+    zl = zp.namelist()
+    zf = None
+    for ext in match_content_extensions.get(extension, [extension]):
+        zl1 = filter(lambda s: s.endswith(ext), zl)
+        if zl1:
+            zf = zl1[0]
+            break
+    if not zf:
+        # Unable to choose an entry: just pick the 1st entry
+        zf = zl[0]
+    
+    sp = zp.open(zf, 'r')
+    return sp, zf
 
 @celery.task(name="datastorer.upload", max_retries=3)
 def datastorer_upload(context, data):
@@ -96,9 +119,17 @@ def _datastorer_upload(context, resource, logger):
 
     content_type = result['headers'].get('content-type', '')\
                                     .split(';', 1)[0]  # remove parameters
+    
+    extension = resource['format'].lower()
+    
+    fp = open(result['saved_file'], 'rb')
+    if zipfile.is_zipfile(result['saved_file']):
+        fp, zf = open_zipped_tableset(fp, extension=extension)
+        logger.info('Opened entry %s from ZIP archive %s', zf, result['saved_file'])
+    else:
+        logger.info('Opened file %s' %(result['saved_file']))
 
-    f = open(result['saved_file'], 'rb')
-    table_sets = any_tableset(f, mimetype=content_type, extension=resource['format'].lower())
+    table_sets = any_tableset(fp, extension=extension)
     
     if 'sample_size' in context:
         table_sets.window = max(1000, int(context['sample_size']))
